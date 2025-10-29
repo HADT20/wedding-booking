@@ -151,15 +151,13 @@ const Calendar = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => {
     const distance = currentTouch - touchStart;
     const scrollTop = e.currentTarget.scrollTop;
 
-    // Allow drag down when collapsed or at top
+    // Update drag offset for visual feedback only
     if (isCalendarCollapsed && distance > 0) {
-      e.preventDefault();
-      setDragOffset(Math.min(distance, maxCalendarHeight));
-    }
-    // Allow drag up when expanded and scrolled to top
-    else if (!isCalendarCollapsed && distance < 0 && scrollTop === 0) {
-      e.preventDefault();
-      setDragOffset(Math.max(distance, -maxCalendarHeight));
+      setDragOffset(Math.min(distance * 0.5, maxCalendarHeight * 0.5)); // Reduced sensitivity
+    } else if (!isCalendarCollapsed && distance < 0 && scrollTop === 0) {
+      setDragOffset(Math.max(distance * 0.5, -maxCalendarHeight * 0.5)); // Reduced sensitivity
+    } else {
+      setDragOffset(0);
     }
   };
 
@@ -203,6 +201,8 @@ const Calendar = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => {
       });
     }
   }, []);
+
+
 
   // Nếu đang hiển thị form edit
   if (editingBooking) {
@@ -364,12 +364,15 @@ const Calendar = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => {
       {/* Selected date details - Compact with Swipe Support */}
       {selectedDate && (
         <div
-          className={`bg-gray-50 ${size.cardPadding} flex-1 overflow-y-auto pb-20 mt-6 ${
+          className={`booking-list-container bg-gray-50 ${size.cardPadding} flex-1 overflow-y-auto pb-20 mt-6 ${
             isDragging ? 'select-none' : ''
           }`}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
+          style={{
+            touchAction: isDragging ? 'none' : 'auto'
+          }}
         >
           <h3 className={`font-semibold text-gray-900 ${size.gapSM} ${size.textBase} mb-3`}>
             Lịch hẹn ngày {selectedDate.getDate()}/{selectedDate.getMonth() + 1}/{selectedDate.getFullYear()}

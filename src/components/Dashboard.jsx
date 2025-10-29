@@ -51,7 +51,14 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
   };
 
   const filteredBookings = getFilteredBookings();
-  const totalDeposit = filteredBookings.reduce((sum, booking) => sum + (booking.deposit || 0), 0);
+  const totalDeposit = filteredBookings.reduce((sum, booking) => {
+    // Nếu đã thanh toán đủ, tính toàn bộ giá trị
+    if (booking.isFullyPaid) {
+      return sum + (booking.price || 0);
+    }
+    // Nếu chưa thanh toán đủ, chỉ tính tiền cọc
+    return sum + (booking.deposit || 0);
+  }, 0);
 
   // Get upcoming bookings for display (sorted by shooting date)
   const upcomingBookingsList = bookings
@@ -130,7 +137,7 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
               {/* Khách hàng */}
               <div className={`relative bg-white ${size.cardRounded} overflow-hidden shadow-sm border border-gray-100`}>
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-green-500 to-green-600"></div>
-                <div className={`${size.cardPadding} pl-4 text-center`}>
+                <div className={`${size.cardPadding} flex flex-col items-center justify-center text-center`}>
                   <div className={`${size.statsLabel} text-gray-500 font-medium mb-1 uppercase tracking-wide`}>Khách hàng</div>
                   <div className={`${size.statsNumber} font-bold text-gray-900`}>{totalBookings}</div>
                 </div>
@@ -139,7 +146,7 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
               {/* Sắp đến ngày hẹn */}
               <div className={`relative bg-white ${size.cardRounded} overflow-hidden shadow-sm border border-gray-100`}>
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-red-500 to-red-600"></div>
-                <div className={`${size.cardPadding} pl-4 text-center`}>
+                <div className={`${size.cardPadding} flex flex-col items-center justify-center text-center`}>
                   <div className={`${size.statsLabel} text-gray-500 font-medium mb-1 uppercase tracking-wide`}>Sắp đến</div>
                   <div className={`${size.statsNumber} font-bold text-red-600`}>{upcomingBookings}</div>
                 </div>
@@ -148,7 +155,7 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
               {/* Hoàn thành */}
               <div className={`relative bg-white ${size.cardRounded} overflow-hidden shadow-sm border border-gray-100`}>
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-orange-500 to-orange-600"></div>
-                <div className={`${size.cardPadding} pl-4 text-center`}>
+                <div className={`${size.cardPadding} flex flex-col items-center justify-center text-center`}>
                   <div className={`${size.statsLabel} text-gray-500 font-medium mb-1 uppercase tracking-wide`}>Hoàn thành</div>
                   <div className={`${size.statsNumber} font-bold text-orange-600`}>{completedBookings}</div>
                 </div>
@@ -160,7 +167,7 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
                 className={`relative bg-white ${size.cardRounded} overflow-hidden shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow active:scale-95`}
               >
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-yellow-500 to-yellow-600"></div>
-                <div className={`${size.cardPadding} pl-4 text-center`}>
+                <div className={`${size.cardPadding} flex flex-col items-center justify-center text-center`}>
                   <div className={`${size.statsLabel} text-gray-500 font-medium mb-1 uppercase tracking-wide`}>Doanh thu</div>
                   <div className={`${size.statsNumber} font-bold text-teal-600`}>
                     {(totalDeposit / 1000000).toFixed(1)}M
@@ -180,12 +187,22 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
             {/* Upcoming Bookings List - Dynamic */}
             <div className={`bg-white ${size.containerRounded} shadow-sm border border-gray-100 overflow-hidden`}>
               <div className={`bg-gradient-to-r from-orange-500 to-orange-400 px-3 ${size.cardPadding.includes('p-4') ? 'py-3' : 'py-2.5'}`}>
-                <h3 className={`font-bold text-white flex items-center ${size.gapSM} ${size.textSM}`}>
-                  <svg className={size.iconBase} fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                  </svg>
-                  Lịch hẹn sắp tới
-                </h3>
+                <div className="flex items-center justify-between">
+                  <div className={`font-bold text-white flex items-center ${size.gapSM} ${size.textSM}`}>
+                    <svg className={size.iconBase} fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    Sắp đến
+                  </div>
+                  <div className="text-white font-bold text-right">
+                    <div className={size.textSM}>
+                      {upcomingBookings}
+                    </div>
+                    <div className="text-xs opacity-90">
+                      ngày nữa
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="divide-y divide-gray-100">
                 {upcomingBookingsList.length === 0 ? (
@@ -238,9 +255,9 @@ const Dashboard = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => 
                               </div>
                             </div>
                           </div>
-                          <div className="flex-shrink-0">
+                          <div className="flex-shrink-0 flex items-center justify-center">
                             <div className={`
-                              px-2 py-1 rounded-md ${size.textXS} font-bold whitespace-nowrap
+                              px-2 py-1 rounded-md ${size.textXS} font-bold whitespace-nowrap text-center
                               ${daysRemaining <= 7
                                 ? 'bg-red-500 text-white'
                                 : daysRemaining <= 14
