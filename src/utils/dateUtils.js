@@ -1,8 +1,25 @@
 // Các hàm tiện ích xử lý ngày tháng
+// Múi giờ Việt Nam: UTC+7
+
+// Lấy ngày giờ hiện tại theo múi giờ Việt Nam
+export const getVietnamDate = () => {
+  const now = new Date();
+  // Chuyển sang múi giờ Việt Nam (UTC+7)
+  const vietnamTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+  return vietnamTime;
+};
+
+// Chuyển đổi date sang múi giờ Việt Nam
+export const toVietnamDate = (date) => {
+  if (!date) return null;
+  const d = new Date(date);
+  const vietnamTime = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+  return vietnamTime;
+};
 
 export const formatDate = (date) => {
   if (!date) return '';
-  const d = new Date(date);
+  const d = toVietnamDate(date);
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
@@ -11,17 +28,10 @@ export const formatDate = (date) => {
 
 export const formatTime = (date) => {
   if (!date) return '';
-  const d = new Date(date);
+  const d = toVietnamDate(date);
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
-};
-
-export const formatDateTime = (date) => {
-  if (!date) return '';
-  const d = new Date(date);
-  const dayOfWeek = getDayOfWeekName(d.getDay());
-  return `${dayOfWeek}, ${formatDate(date)} ${formatTime(date)}`;
 };
 
 export const getDayOfWeekName = (dayIndex) => {
@@ -39,23 +49,28 @@ export const getMonthName = (month) => {
 };
 
 export const getDaysInMonth = (year, month) => {
+  // Số ngày trong tháng không phụ thuộc múi giờ
   return new Date(year, month + 1, 0).getDate();
 };
 
 export const getFirstDayOfMonth = (year, month) => {
-  return new Date(year, month, 1).getDay();
+  // Tạo ngày đầu tháng ở múi giờ Việt Nam
+  // Sử dụng chuỗi ISO để tránh lệch múi giờ
+  const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00+07:00`;
+  const date = new Date(dateStr);
+  return date.getDay();
 };
 
 export const isSameDay = (date1, date2) => {
-  const d1 = new Date(date1);
-  const d2 = new Date(date2);
+  const d1 = toVietnamDate(date1);
+  const d2 = toVietnamDate(date2);
   return d1.getFullYear() === d2.getFullYear() &&
          d1.getMonth() === d2.getMonth() &&
          d1.getDate() === d2.getDate();
 };
 
 export const isToday = (date) => {
-  return isSameDay(date, new Date());
+  return isSameDay(date, getVietnamDate());
 };
 
 export const getWeekDays = () => {
@@ -182,7 +197,7 @@ export const solarToLunar = (dd, mm, yy) => {
 // Format ngày âm lịch
 export const formatLunarDate = (date) => {
   if (!date) return '';
-  const d = new Date(date);
+  const d = toVietnamDate(date);
   const lunar = solarToLunar(d.getDate(), d.getMonth() + 1, d.getFullYear());
   return `${lunar.day}/${lunar.month} Âm lịch`;
 };
@@ -190,7 +205,9 @@ export const formatLunarDate = (date) => {
 // Format ngày giờ kèm âm lịch
 export const formatDateTimeWithLunar = (date) => {
   if (!date) return '';
-  const solarDate = formatDateTime(date);
+  const d = toVietnamDate(date);
+  const dayOfWeek = getDayOfWeekName(d.getDay());
+  const solarDate = `${dayOfWeek}, ${formatDate(date)}`;
   const lunarDate = formatLunarDate(date);
   return `${solarDate} - ${lunarDate}`;
 };

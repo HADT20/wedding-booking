@@ -6,22 +6,42 @@ import {
   getWeekDays,
   isSameDay,
   isToday,
-  formatTime
+  formatTime,
+  getVietnamDate,
+  toVietnamDate
 } from '../utils/dateUtils';
+import { SAFE_AREA_PADDING } from '../utils/constants';
+import { useDisplaySize } from '../contexts/DisplaySizeContext';
+import { getSizeClasses } from '../utils/displaySizeClasses';
 import BookingDetail from './BookingDetail';
 import BookingForm from './BookingForm';
 
-const Calendar = ({ bookings, onEdit, onDelete, onComplete }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+const Calendar = ({ bookings, onEdit, onDelete, onComplete, onViewChange }) => {
+  const [currentDate, setCurrentDate] = useState(getVietnamDate());
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
   const monthScrollRef = useRef(null);
   const currentMonthRef = useRef(null);
   const [editingBooking, setEditingBooking] = useState(null);
+  const { displaySize } = useDisplaySize();
+  const size = getSizeClasses(displaySize);
+  const [isCalendarCollapsed, setIsCalendarCollapsed] = useState(false);
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const calendarRef = useRef(null);
+
+  // Notify parent when view changes
+  useEffect(() => {
+    if (onViewChange) {
+      onViewChange(!!selectedBooking || !!editingBooking);
+    }
+  }, [selectedBooking, editingBooking, onViewChange]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-  const today = new Date();
+  const today = getVietnamDate();
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
@@ -107,6 +127,66 @@ const Calendar = ({ bookings, onEdit, onDelete, onComplete }) => {
     setEditingBooking(null);
   };
 
+  // Minimum swipe distance (in px)
+  const minSwipeDistance = 30;
+  const maxCalendarHeight = 450; // Maximum height of calendar section
+
+  const onTouchStart = (e) => {
+    const scrollTop = e.currentTarget.scrollTop;
+
+    // Only allow swipe down when at the top of the list
+    if (scrollTop === 0 || isCalendarCollapsed) {
+      setTouchEnd(null);
+      setTouchStart(e.targetTouches[0].clientY);
+      setIsDragging(true);
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (!touchStart) return;
+
+    const currentTouch = e.targetTouches[0].clientY;
+    setTouchEnd(currentTouch);
+
+    const distance = currentTouch - touchStart;
+    const scrollTop = e.currentTarget.scrollTop;
+
+    // Allow drag down when collapsed or at top
+    if (isCalendarCollapsed && distance > 0) {
+      e.preventDefault();
+      setDragOffset(Math.min(distance, maxCalendarHeight));
+    }
+    // Allow drag up when expanded and scrolled to top
+    else if (!isCalendarCollapsed && distance < 0 && scrollTop === 0) {
+      e.preventDefault();
+      setDragOffset(Math.max(distance, -maxCalendarHeight));
+    }
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) {
+      setIsDragging(false);
+      setDragOffset(0);
+      return;
+    }
+
+    const distance = touchStart - touchEnd;
+    const isUpSwipe = distance > minSwipeDistance;
+    const isDownSwipe = distance < -minSwipeDistance;
+
+    if (isUpSwipe && !isCalendarCollapsed) {
+      setIsCalendarCollapsed(true);
+    }
+    if (isDownSwipe && isCalendarCollapsed) {
+      setIsCalendarCollapsed(false);
+    }
+
+    setIsDragging(false);
+    setDragOffset(0);
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
   // Auto scroll to current month on mount
   useEffect(() => {
     if (currentMonthRef.current && monthScrollRef.current) {
@@ -149,139 +229,177 @@ const Calendar = ({ bookings, onEdit, onDelete, onComplete }) => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
-      {/* Page Header */}
-      <div className="bg-gradient-to-r from-green-800 to-green-700 px-4 py-3 text-white">
-        <h2 className="text-lg font-bold mb-0.5">Lịch</h2>
-        <p className="text-xs text-green-100">Xem lịch hẹn theo tháng</p>
+    <div className="h-full flex flex-col bg-gray-50" style={{
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
+    }}>
+      {/* Page Header - Compact */}
+      <div className="px-3 pt-safe relative z-20" style={SAFE_AREA_PADDING}>
+        <div className={`bg-gradient-to-r from-green-600 to-teal-500 ${size.headerRounded} px-3 py-2 text-white shadow-md mt-2 flex items-center justify-between`}>
+          <h2 className={`${size.textBase} font-bold`}>Lịch</h2>
+          <button
+            onClick={() => setIsCalendarCollapsed(!isCalendarCollapsed)}
+            className="p-1 hover:bg-white/20 rounded-lg transition-all"
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-300 ${isCalendarCollapsed ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Month selector - horizontal scroll */}
-      <div className="bg-white border-b border-gray-200">
-        <div ref={monthScrollRef} className="overflow-x-auto scrollbar-hide px-3 py-2">
-          <div className="flex gap-2 items-center">
-            {months.map((monthIndex) => {
-              const isCurrentMonth = monthIndex === currentMonth && year === currentYear;
-              const isSelectedMonth = monthIndex === month;
+      {/* Calendar Section - Collapsible */}
+      <div
+        ref={calendarRef}
+        className={`bg-white border-b border-gray-200 overflow-hidden flex-shrink-0 ${
+          isDragging ? '' : 'transition-all duration-500 ease-out'
+        }`}
+        style={{
+          maxHeight: isDragging
+            ? `${Math.max(0, isCalendarCollapsed ? dragOffset : maxCalendarHeight + dragOffset)}px`
+            : isCalendarCollapsed ? '0px' : `${maxCalendarHeight}px`,
+          opacity: isDragging
+            ? Math.max(0, Math.min(1, isCalendarCollapsed ? dragOffset / maxCalendarHeight : 1 + dragOffset / maxCalendarHeight))
+            : isCalendarCollapsed ? 0 : 1,
+        }}
+      >
+        {/* Month selector - Compact */}
+        <div className="py-1.5">
+          <div ref={monthScrollRef} className="overflow-x-auto scrollbar-hide px-3">
+            <div className="flex gap-1.5">
+              {months.map((monthIndex) => {
+                const isCurrentMonth = monthIndex === currentMonth && year === currentYear;
+                const isSelectedMonth = monthIndex === month;
+
+                return (
+                  <button
+                    key={monthIndex}
+                    ref={isCurrentMonth ? currentMonthRef : null}
+                    onClick={() => handleMonthClick(monthIndex)}
+                    className={`
+                      px-2 py-1 rounded-lg font-medium text-[10px] whitespace-nowrap transition-all flex-shrink-0
+                      ${isSelectedMonth && isCurrentMonth
+                        ? 'bg-green-700 text-white shadow-md ring-2 ring-green-400'
+                        : isSelectedMonth
+                        ? 'bg-green-700 text-white shadow-md'
+                        : isCurrentMonth
+                        ? 'bg-green-100 text-green-700 border border-green-300'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }
+                    `}
+                    style={{ width: 'calc((100vw - 32px) / 4 - 4.5px)' }}
+                  >
+                    T{monthIndex + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Weekday headers - Compact */}
+          <div className="grid grid-cols-7 gap-1 text-center text-[9px] font-semibold text-gray-600 px-3 py-1 mt-1">
+            {weekDays.map((day) => (
+              <div key={day}>
+                {day}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Calendar grid - Compact */}
+        <div className="px-3 pb-3">
+          <div className="grid grid-cols-7 gap-1">
+            {days.map((day, index) => {
+              if (!day) {
+                return <div key={`empty-${index}`} className="w-9 h-9" />;
+              }
+
+              const date = new Date(year, month, day);
+              const dayBookings = getBookingsForDate(day);
+              const hasBookings = dayBookings.length > 0;
+              const today = isToday(date);
+              const selected = selectedDate && isSameDay(date, selectedDate);
 
               return (
                 <button
-                  key={monthIndex}
-                  ref={isCurrentMonth ? currentMonthRef : null}
-                  onClick={() => handleMonthClick(monthIndex)}
+                  key={day}
+                  onClick={() => handleDayClick(day)}
                   className={`
-                    px-3 py-1.5 rounded-lg font-medium text-sm whitespace-nowrap transition-all flex-shrink-0 w-[82px]
-                    ${isSelectedMonth && isCurrentMonth
-                      ? 'bg-green-700 text-white shadow-md ring-2 ring-green-400'
-                      : isSelectedMonth
-                      ? 'bg-green-700 text-white shadow-md'
-                      : isCurrentMonth
-                      ? 'bg-green-100 text-green-700 border border-green-300'
-                      : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }
+                    w-9 h-9 p-0.5 rounded-lg transition-all relative border-2
+                    ${today && !hasBookings ? 'bg-green-50 border-green-600 text-green-700 shadow-sm' : ''}
+                    ${today && hasBookings ? 'bg-gradient-to-br from-green-50 to-orange-50 border-green-600 text-gray-900 shadow-sm' : ''}
+                    ${!today && hasBookings ? 'bg-orange-100 border-orange-500 text-gray-900 shadow-sm' : ''}
+                    ${!today && !hasBookings ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300' : ''}
+                    ${selected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
+                    active:scale-95
                   `}
                 >
-                  Tháng {monthIndex + 1}
+                  <div className="flex flex-col items-center justify-center h-full w-full">
+                    <span className={`text-[10px] font-semibold ${hasBookings ? 'mb-0.5' : ''}`}>
+                      {day}
+                    </span>
+                    {hasBookings && (
+                      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2">
+                        <div className={`
+                          text-[7px] font-bold px-0.5 py-0 rounded-full leading-tight
+                          ${today ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}
+                        `}>
+                          {dayBookings.length}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </button>
               );
             })}
           </div>
         </div>
-
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-gray-600 px-2 py-1.5">
-          {weekDays.map((day) => (
-            <div key={day} className="py-1">
-              {day}
-            </div>
-          ))}
-        </div>
       </div>
 
-      {/* Calendar grid */}
-      <div className="overflow-y-auto p-1.5 bg-white flex-shrink-0">
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((day, index) => {
-            if (!day) {
-              return <div key={`empty-${index}`} className="aspect-square" />;
-            }
-
-            const date = new Date(year, month, day);
-            const dayBookings = getBookingsForDate(day);
-            const hasBookings = dayBookings.length > 0;
-            const today = isToday(date);
-            const selected = selectedDate && isSameDay(date, selectedDate);
-
-            return (
-              <button
-                key={day}
-                onClick={() => handleDayClick(day)}
-                className={`
-                  aspect-square p-1 rounded-lg transition-all relative border
-                  ${today && !hasBookings ? 'bg-green-50 border-green-600 text-green-700 shadow-md' : ''}
-                  ${today && hasBookings ? 'bg-gradient-to-br from-green-50 to-orange-50 border-green-600 text-gray-900 shadow-md' : ''}
-                  ${!today && hasBookings ? 'bg-orange-100 border-orange-500 text-gray-900 shadow-sm' : ''}
-                  ${!today && !hasBookings ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50' : ''}
-                  ${selected ? 'ring-2 ring-blue-500' : ''}
-                  active:scale-95
-                `}
-              >
-                <div className="flex flex-col items-center justify-center h-full">
-                  <span className={`text-sm font-medium ${hasBookings ? 'mb-1' : ''}`}>
-                    {day}
-                  </span>
-                  {hasBookings && (
-                    <div className="absolute bottom-0.5 left-1/2 transform -translate-x-1/2">
-                      <div className={`
-                        text-xs font-bold px-1.5 py-0.5 rounded-full
-                        ${today ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'}
-                      `}>
-                        {dayBookings.length}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Selected date details */}
+      {/* Selected date details - Compact with Swipe Support */}
       {selectedDate && (
-        <div className="border-t border-gray-200 bg-gray-50 p-3 flex-1 overflow-y-auto">
-          <h3 className="font-semibold text-gray-900 mb-3 text-base">
+        <div
+          className={`bg-gray-50 ${size.cardPadding} flex-1 overflow-y-auto pb-20 mt-6 ${
+            isDragging ? 'select-none' : ''
+          }`}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
+          <h3 className={`font-semibold text-gray-900 ${size.gapSM} ${size.textBase} mb-3`}>
             Lịch hẹn ngày {selectedDate.getDate()}/{selectedDate.getMonth() + 1}/{selectedDate.getFullYear()}
           </h3>
 
           {selectedBookings.length === 0 ? (
-            <p className="text-sm text-gray-500 text-center py-4">
+            <p className={`${size.textSM} text-gray-500 text-center py-3`}>
               Không có lịch hẹn nào trong ngày này
             </p>
           ) : (
-            <div className="space-y-2.5">
+            <div className={size.containerSpacing}>
               {selectedBookings
                 .sort((a, b) => new Date(a.shootingDateTime) - new Date(b.shootingDateTime))
                 .map((booking) => (
                   <div
                     key={booking.id}
                     onClick={() => handleBookingClick(booking)}
-                    className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors"
+                    className={`bg-white border border-gray-200 ${size.cardRounded} ${size.cardPadding} shadow-sm cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition-colors`}
                   >
-                    <div className="flex justify-between items-start mb-1.5">
-                      <h4 className="font-semibold text-gray-900 text-base">
+                    <div className={`flex justify-between items-start ${size.gapSM}`}>
+                      <h4 className={`font-semibold text-gray-900 ${size.textBase}`}>
                         {booking.customerName}
                       </h4>
-                      <span className="text-sm text-green-700 font-semibold">
+                      <span className={`${size.textSM} text-green-700 font-semibold`}>
                         {formatTime(booking.shootingDateTime)}
                       </span>
                     </div>
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className={`${size.textSM} text-gray-600 ${size.cardSpacing}`}>
                       <p>📞 {booking.phone}</p>
                       <p>📍 {booking.address}</p>
-                      {booking.notes && (
-                        <p className="text-gray-500 italic mt-1.5">💬 {booking.notes}</p>
-                      )}
                     </div>
                   </div>
                 ))}

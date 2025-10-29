@@ -8,27 +8,42 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="theme-color" content="#15803d" />
-    <title>📸 Quản lý lịch chụp cưới</title>
+    <title>Quản lý lịch chụp cưới</title>
     <style>
       /* Prevent pull-to-refresh on iOS */
       body {
         overscroll-behavior-y: none;
       }
 
-      /* Full height for mobile */
+      /* Full height for mobile with safe area support */
       html, body, #root {
         height: 100%;
+        height: 100vh;
+        height: 100dvh; /* Dynamic viewport height for mobile browsers */
         margin: 0;
         padding: 0;
         overflow: hidden;
+      }
+
+      /* Support for iPhone notch and home indicator */
+      @supports (padding: max(0px)) {
+        body {
+          padding-bottom: env(safe-area-inset-bottom);
+        }
+      }
+
+      /* Safe area padding for top */
+      .pt-safe {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+
+      .pb-safe {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Eruda: Mobile console for debugging -->
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-    <script>eruda.init();</script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

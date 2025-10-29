@@ -1,40 +1,17 @@
-# 🚀 Hướng dẫn thiết lập Supabase cho Wedding Booking App
+# 🗄️ Hướng dẫn Setup Supabase Database
 
-## 📋 Mục lục
-1. [Tạo tài khoản Supabase](#1-tạo-tài-khoản-supabase)
-2. [Tạo project mới](#2-tạo-project-mới)
-3. [Tạo bảng database](#3-tạo-bảng-database)
-4. [Lấy API credentials](#4-lấy-api-credentials)
-5. [Cấu hình ứng dụng](#5-cấu-hình-ứng-dụng)
-6. [Kiểm tra kết nối](#6-kiểm-tra-kết-nối)
+## 1. Tạo Project Supabase
 
----
+1. Truy cập [https://supabase.com](https://supabase.com)
+2. Đăng nhập hoặc tạo tài khoản mới
+3. Click **"New Project"**
+4. Điền thông tin:
+   - **Name:** wedding-booking-app (hoặc tên bạn muốn)
+   - **Database Password:** Tạo mật khẩu mạnh (lưu lại để sau này dùng)
+   - **Region:** Southeast Asia (Singapore) - gần Việt Nam nhất
+5. Click **"Create new project"** và đợi vài phút
 
-## 1. Tạo tài khoản Supabase
-
-1. Truy cập: https://supabase.com
-2. Click **"Start your project"** hoặc **"Sign Up"**
-3. Đăng ký bằng GitHub, Google, hoặc email
-4. Xác nhận email (nếu cần)
-
----
-
-## 2. Tạo project mới
-
-1. Sau khi đăng nhập, click **"New Project"**
-2. Điền thông tin:
-   - **Name**: `wedding-booking` (hoặc tên bạn muốn)
-   - **Database Password**: Tạo mật khẩu mạnh (LƯU LẠI mật khẩu này!)
-   - **Region**: Chọn `Southeast Asia (Singapore)` (gần Việt Nam nhất)
-   - **Pricing Plan**: Chọn **Free** (đủ cho development)
-3. Click **"Create new project"**
-4. Đợi 1-2 phút để Supabase khởi tạo project
-
----
-
-## 3. Tạo bảng database
-
-### Cách 1: Dùng SQL Editor (Khuyến nghị)
+## 2. Tạo Table `bookings`
 
 1. Vào **SQL Editor** (menu bên trái)
 2. Click **"New query"**
@@ -46,76 +23,110 @@ CREATE TABLE bookings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   customer_name TEXT NOT NULL,
   phone TEXT NOT NULL,
-  address TEXT NOT NULL,
-  shooting_date_time TIMESTAMP WITH TIME ZONE NOT NULL,
-  price NUMERIC(10, 2) DEFAULT 0,
-  deposit NUMERIC(10, 2) DEFAULT 0,
+  address TEXT,
+  shooting_date_time TIMESTAMPTZ NOT NULL,
+  price DECIMAL(10, 2) DEFAULT 0,
+  deposit DECIMAL(10, 2) DEFAULT 0,
   notes TEXT,
   is_completed BOOLEAN DEFAULT FALSE,
   is_fully_paid BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Tạo index để tăng tốc độ query
 CREATE INDEX idx_bookings_shooting_date ON bookings(shooting_date_time);
+CREATE INDEX idx_bookings_customer_name ON bookings(customer_name);
 CREATE INDEX idx_bookings_is_completed ON bookings(is_completed);
 
--- Bật Row Level Security (RLS)
+-- Tạo function để tự động cập nhật updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Tạo trigger để tự động cập nhật updated_at khi có thay đổi
+CREATE TRIGGER update_bookings_updated_at
+  BEFORE UPDATE ON bookings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Thêm comment cho các cột
+COMMENT ON TABLE bookings IS 'Bảng lưu trữ thông tin đặt lịch chụp ảnh cưới';
+COMMENT ON COLUMN bookings.customer_name IS 'Tên khách hàng';
+COMMENT ON COLUMN bookings.phone IS 'Số điện thoại';
+COMMENT ON COLUMN bookings.address IS 'Địa chỉ chụp ảnh';
+COMMENT ON COLUMN bookings.shooting_date_time IS 'Ngày giờ chụp ảnh';
+COMMENT ON COLUMN bookings.price IS 'Tổng giá trị hợp đồng';
+COMMENT ON COLUMN bookings.deposit IS 'Số tiền đã cọc';
+COMMENT ON COLUMN bookings.notes IS 'Ghi chú thêm';
+COMMENT ON COLUMN bookings.is_completed IS 'Đã hoàn thành chụp';
+COMMENT ON COLUMN bookings.is_fully_paid IS 'Đã thanh toán đủ';
+```
+
+4. Click **"Run"** để thực thi
+5. Kiểm tra kết quả: Nếu thành công sẽ hiện "Success. No rows returned"
+
+## 3. Cấu hình Row Level Security (RLS)
+
+### Tắt RLS để test (không khuyến khích cho production):
+
+```sql
+-- Tắt RLS (chỉ dùng cho development/testing)
+ALTER TABLE bookings DISABLE ROW LEVEL SECURITY;
+```
+
+### Hoặc bật RLS với policy cho phép tất cả (khuyến khích):
+
+```sql
+-- Bật RLS
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
 
--- Tạo policy cho phép tất cả thao tác (cho development)
--- LƯU Ý: Trong production nên có authentication và policy chặt chẽ hơn
-CREATE POLICY "Enable all access for development" ON bookings
-  FOR ALL
+-- Tạo policy cho phép SELECT (đọc)
+CREATE POLICY "Allow public read access"
+  ON bookings
+  FOR SELECT
+  TO public
+  USING (true);
+
+-- Tạo policy cho phép INSERT (thêm)
+CREATE POLICY "Allow public insert access"
+  ON bookings
+  FOR INSERT
+  TO public
+  WITH CHECK (true);
+
+-- Tạo policy cho phép UPDATE (cập nhật)
+CREATE POLICY "Allow public update access"
+  ON bookings
+  FOR UPDATE
+  TO public
   USING (true)
   WITH CHECK (true);
 
--- Thêm dữ liệu mẫu (optional)
-INSERT INTO bookings (customer_name, phone, address, shooting_date_time, price, deposit, notes)
-VALUES 
-  ('Nguyễn Văn A', '0901234567', 'Hà Nội', '2025-11-15 14:00:00+07', 5000000, 2000000, 'Chụp ảnh cưới ngoại cảnh'),
-  ('Trần Thị B', '0912345678', 'TP.HCM', '2025-11-20 09:00:00+07', 7000000, 3000000, 'Chụp ảnh studio + ngoại cảnh'),
-  ('Lê Văn C', '0923456789', 'Đà Nẵng', '2025-11-25 16:00:00+07', 4000000, 2000000, 'Chụp ảnh cưới biển');
+-- Tạo policy cho phép DELETE (xóa)
+CREATE POLICY "Allow public delete access"
+  ON bookings
+  FOR DELETE
+  TO public
+  USING (true);
 ```
 
-4. Click **"Run"** (hoặc Ctrl/Cmd + Enter)
-5. Kiểm tra kết quả: Nếu thấy "Success. No rows returned" là OK!
+**Lưu ý:** Cấu hình trên cho phép tất cả mọi người truy cập. Trong production, bạn nên thêm authentication và giới hạn quyền truy cập.
 
-### Cách 2: Dùng Table Editor (Giao diện)
+## 4. Lấy API Keys
 
-1. Vào **Table Editor** (menu bên trái)
-2. Click **"Create a new table"**
-3. Tạo bảng `bookings` với các cột:
-   - `id`: uuid, primary key, default: gen_random_uuid()
-   - `customer_name`: text, not null
-   - `phone`: text, not null
-   - `address`: text, not null
-   - `shooting_date_time`: timestamptz, not null
-   - `price`: numeric, default: 0
-   - `deposit`: numeric, default: 0
-   - `notes`: text
-   - `is_completed`: boolean, default: false
-   - `is_fully_paid`: boolean, default: false
-   - `created_at`: timestamptz, default: now()
+1. Vào **Settings** → **API** (menu bên trái)
+2. Tìm và copy 2 thông tin sau:
+   - **Project URL:** `https://xxxxxxxxxxxxx.supabase.co`
+   - **anon/public key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (một chuỗi rất dài)
 
----
+## 5. Cấu hình trong Project
 
-## 4. Lấy API credentials
-
-1. Vào **Settings** > **API** (menu bên trái)
-2. Tìm phần **Project URL**:
-   - Copy URL (dạng: `https://xxxxxxxxxxxxx.supabase.co`)
-3. Tìm phần **Project API keys**:
-   - Copy **anon public** key (key dài, bắt đầu bằng `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
-   - ⚠️ **KHÔNG** dùng `service_role` key ở client-side!
-
----
-
-## 5. Cấu hình ứng dụng
-
-### Bước 1: Cập nhật file `.env.local`
-
-1. Mở file `wedding-booking-app/.env.local`
+1. Mở file `.env.local` trong project
 2. Thay thế các giá trị:
 
 ```env
@@ -125,81 +136,52 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 3. Lưu file
 
-### Bước 2: Khởi động lại dev server
+## 6. Test kết nối
 
+1. Khởi động lại dev server:
 ```bash
-# Dừng server hiện tại (Ctrl + C)
-# Khởi động lại
 npm run dev
 ```
 
----
+2. Mở browser console (F12)
+3. Kiểm tra log:
+   - ✅ "Supabase client đã được khởi tạo thành công!" → Kết nối OK
+   - ❌ "Thiếu cấu hình Supabase!" → Kiểm tra lại file .env.local
 
-## 6. Kiểm tra kết nối
+## 7. Thêm dữ liệu mẫu (Optional)
 
-### Kiểm tra trong Console
+Nếu muốn thêm dữ liệu mẫu để test:
 
-1. Mở ứng dụng trong browser
-2. Mở **Developer Tools** (F12)
-3. Vào tab **Console**
-4. Tìm các log:
-   - ✅ `Supabase client đã được khởi tạo thành công!`
-   - ✅ `Đang tải bookings từ Supabase...`
-   - ✅ `Đã tải X bookings từ Supabase`
+```sql
+INSERT INTO bookings (customer_name, phone, address, shooting_date_time, price, deposit, notes)
+VALUES 
+  ('Nguyễn Văn A & Trần Thị B', '0901234567', 'Công viên Tao Đàn, Q1, TP.HCM', '2025-11-15 08:00:00+07', 15000000, 5000000, 'Chụp ngoại cảnh buổi sáng'),
+  ('Lê Văn C & Phạm Thị D', '0912345678', 'Nhà thờ Đức Bà, Q1, TP.HCM', '2025-11-20 14:00:00+07', 20000000, 8000000, 'Chụp trong nhà thờ + ngoại cảnh'),
+  ('Hoàng Văn E & Võ Thị F', '0923456789', 'Bảo tàng Mỹ thuật, Q3, TP.HCM', '2025-11-25 09:00:00+07', 18000000, 6000000, 'Chụp concept nghệ thuật');
+```
 
-### Kiểm tra trong ứng dụng
+## 8. Kiểm tra trong App
 
-1. Vào tab **Dashboard**:
-   - Nếu thấy số liệu thống kê → Kết nối thành công! ✅
-2. Vào tab **Danh sách**:
-   - Nếu thấy danh sách booking → Kết nối thành công! ✅
-3. Thử thêm booking mới:
-   - Click nút **+** ở góc dưới phải
-   - Điền thông tin và lưu
-   - Kiểm tra trong Supabase Table Editor xem có dữ liệu mới không
+1. Mở app trong browser
+2. Vào tab **"Danh sách"**
+3. Nếu thấy dữ liệu hiển thị → Thành công! 🎉
+4. Thử thêm booking mới để test chức năng INSERT
 
----
+## 🔒 Bảo mật (Production)
 
-## 🔧 Troubleshooting
+Khi deploy lên production, nên:
 
-### Lỗi: "Supabase connection not configured"
+1. **Bật Authentication:**
+   - Vào **Authentication** → **Providers**
+   - Bật Email/Password hoặc OAuth (Google, Facebook...)
 
-**Nguyên nhân:** Chưa cấu hình `.env.local` đúng
+2. **Cập nhật RLS Policies:**
+   - Chỉ cho phép user đã đăng nhập truy cập
+   - Ví dụ: `USING (auth.uid() IS NOT NULL)`
 
-**Giải pháp:**
-1. Kiểm tra file `.env.local` có tồn tại không
-2. Kiểm tra các biến môi trường có đúng tên không:
-   - `VITE_SUPABASE_URL` (có prefix `VITE_`)
-   - `VITE_SUPABASE_ANON_KEY` (có prefix `VITE_`)
-3. Khởi động lại dev server: `npm run dev`
-
-### Lỗi: "Failed to fetch" hoặc CORS error
-
-**Nguyên nhân:** URL hoặc API key sai
-
-**Giải pháp:**
-1. Kiểm tra lại URL và API key trong Supabase Dashboard
-2. Đảm bảo copy đúng **anon public** key (không phải service_role)
-3. Kiểm tra project Supabase có đang hoạt động không
-
-### Lỗi: "permission denied for table bookings"
-
-**Nguyên nhân:** Chưa bật RLS hoặc chưa tạo policy
-
-**Giải pháp:**
-1. Vào **Authentication** > **Policies**
-2. Chọn bảng `bookings`
-3. Tạo policy mới cho phép tất cả thao tác (xem phần 3)
-
-### Không thấy dữ liệu trong ứng dụng
-
-**Giải pháp:**
-1. Kiểm tra Console có lỗi không
-2. Vào Supabase Table Editor, kiểm tra bảng `bookings` có dữ liệu không
-3. Thử refresh lại trang (F5)
-4. Kiểm tra Network tab xem có request đến Supabase không
-
----
+3. **Giới hạn quyền:**
+   - Tạo role riêng cho admin
+   - Chỉ admin mới được xóa/sửa booking
 
 ## 📚 Tài liệu tham khảo
 
@@ -207,17 +189,26 @@ npm run dev
 - [Supabase JavaScript Client](https://supabase.com/docs/reference/javascript/introduction)
 - [Row Level Security](https://supabase.com/docs/guides/auth/row-level-security)
 
+## ❓ Troubleshooting
+
+### Lỗi: "Supabase connection not configured"
+- Kiểm tra file `.env.local` có đúng format không
+- Restart dev server sau khi thay đổi .env
+
+### Lỗi: "Failed to fetch"
+- Kiểm tra Project URL có đúng không
+- Kiểm tra internet connection
+
+### Lỗi: "new row violates row-level security policy"
+- Kiểm tra RLS policies
+- Có thể tạm thời disable RLS để test
+
+### Không thấy dữ liệu
+- Vào Supabase Dashboard → Table Editor → bookings
+- Kiểm tra xem có data không
+- Kiểm tra console log trong browser
+
 ---
 
-## 🎉 Hoàn thành!
-
-Nếu mọi thứ hoạt động tốt, bạn đã thiết lập thành công Supabase cho ứng dụng Wedding Booking! 🎊
-
-**Các bước tiếp theo:**
-- Thêm authentication (đăng nhập/đăng ký)
-- Tạo RLS policies chặt chẽ hơn
-- Deploy lên production
-- Backup database định kỳ
-
-Chúc bạn phát triển ứng dụng thành công! 💪
+**Chúc bạn setup thành công! 🚀**
 
